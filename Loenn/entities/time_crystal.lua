@@ -1,3 +1,5 @@
+local crystallineHelper = require("mods").requireFromPlugin("libraries.crystalline_helper")
+
 local timeCrystal = {}
 
 timeCrystal.name = "vitellary/timecrystal"
@@ -12,6 +14,14 @@ timeCrystal.fieldInformation = {
     },
     timeScale = {
         minimumValue = 0.0
+    },
+    entityTypesToIgnore = {
+        fieldType = "list",
+        elementDefault = "",
+        elementOptions = {
+             options = function() return crystallineHelper.getMapSIDs() end,
+             searchable = true
+        }
     }
 }
 

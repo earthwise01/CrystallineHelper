@@ -4,48 +4,52 @@ using Monocle;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
+using Celeste.Mod.Registry;
 
 namespace vitmod {
     /// <summary>
     /// Provides utility functions for turning strings to types
     /// </summary>
     internal static class TypeHelper {
-        //private static Dictionary<string, HashSet<Type>> TypeListCache = new(StringComparer.Ordinal);
+        private static Dictionary<string, HashSet<Type>> TypeListCache = new(StringComparer.Ordinal);
         private static Type[] AllEntityTypes;
 
         /// <summary>
-        /// Parses a comma-seperated list of c# type full names or short names. Cached.
+        /// Parses a comma-separated list of c# type full names or short names. Cached.
         /// </summary>
         public static HashSet<Type> ParseTypeList(string list) {
-            // TODO: Re-optimize and replace this for .NET Core
+            if (TypeListCache.TryGetValue(list, out var result))
+                return result;
 
-            //if (TypeListCache.TryGetValue(list, out var result)) {
-            //    return result;
-            //}
-
-            var split = list.Split(',');
+            var split = list.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
             AllEntityTypes ??= FakeAssembly.GetFakeEntryAssembly().GetTypes().Where(t => t.IsSubclassOf(typeof(Entity))).ToArray();
 
-            //TypeListCache[list] = result;
+            result = new(AllEntityTypes.Where(t =>
+                EntityRegistry.GetKnownSidsFromType(t).Overlaps(split)
+                || split.Contains(t.FullName, StringComparer.Ordinal)
+                || split.Contains(t.Name, StringComparer.Ordinal)));
+            TypeListCache[list] = result;
 
-            return new(AllEntityTypes.Where(t => split.Contains(t.FullName, StringComparer.Ordinal) || split.Contains(t.Name, StringComparer.Ordinal)));
+            return result;
         }
 
+        #region Hooks
+
         internal static void Load() {
-            //On.Celeste.Mod.Everest.Loader.LoadModAssembly += Loader_LoadModAssembly;
+            Everest.Events.Everest.OnLoadMod += Event_Everest_OnLoadMod;
         }
 
         internal static void Unload() {
-            //On.Celeste.Mod.Everest.Loader.LoadModAssembly -= Loader_LoadModAssembly;
+            Everest.Events.Everest.OnLoadMod -= Event_Everest_OnLoadMod;
         }
 
-        //// Clear the cache if a mod is loaded/hot reloaded
-        //private static void Loader_LoadModAssembly(On.Celeste.Mod.Everest.Loader.orig_LoadModAssembly orig, EverestModuleMetadata meta, Assembly asm) {
-        //    orig(meta, asm);
-        //    AllEntityTypes = null;
-        //    TypeListCache.Clear();
-        //}
+        // Clear the cache if a mod is loaded/hot reloaded
+        private static void Event_Everest_OnLoadMod(EverestModuleMetadata meta) {
+            AllEntityTypes = null;
+            TypeListCache.Clear();
+        }
+
+        #endregion
     }
 }

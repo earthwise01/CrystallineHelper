@@ -256,10 +256,6 @@ namespace vitmod
         }
         public override void Load()
         {
-            //cacheing
-            deltaTimeInfo = typeof(Engine).GetProperty("DeltaTime");
-            rawDeltaTimeInfo = typeof(Engine).GetProperty("RawDeltaTime");
-            rendererListSceneInfo = typeof(RendererList).GetField("scene", BindingFlags.NonPublic | BindingFlags.Instance);
             frostHelperLoaded = Everest.Loader.DependencyLoaded(new EverestModuleMetadata
             {
                 Name = "FrostHelper",
@@ -341,7 +337,7 @@ namespace vitmod
                 if (TimeCrystal.stopTimer > 0f)
                 {
                     TimeCrystal.stopTimer -= Engine.DeltaTime;
-                    if (timeStopType == TimeCrystal.freezeTypes.Timer)
+                    if (timeStopType == TimeCrystal.FreezeTypes.Timer)
                     {
                         if (TimeCrystal.stopTimer <= 0f)
                         {
@@ -360,7 +356,7 @@ namespace vitmod
                         }
                     }
                 }
-                if (timeStopType == TimeCrystal.freezeTypes.UntilDash)
+                if (timeStopType == TimeCrystal.FreezeTypes.UntilDash)
                 {
                     if (TimeCrystal.stopTimer > 0f)
                     {
@@ -373,7 +369,7 @@ namespace vitmod
                         {
                             TimeCrystal.stopTimer = 2f;
                             TimeCrystal.stopStage = 2;
-                            timeStopType = TimeCrystal.freezeTypes.Timer; //hacky thing to get it to resume time normally
+                            timeStopType = TimeCrystal.FreezeTypes.Timer; //hacky thing to get it to resume time normally
                             timeStopScaleTimer = TimeCrystal.timeScaleToSet;
                         }
                     }
@@ -516,15 +512,14 @@ namespace vitmod
                         {
                             if (noMoveCheck)
                             {
-                                deltaTimeInfo.SetValue(null, noMoveDelta);
+                                Engine.DeltaTime = noMoveDelta;
                             }
                             else if (timeStopCheck)
                             {
-                                if (!TimeCrystal.entitiesToIgnore.Contains(entity.GetType().FullName) &&
-                                    !TimeCrystal.entitiesToIgnore.Contains(entity.GetType().Name) &&
-                                    !(timeStopDelta < 0f && entity is ParticleSystem))
+                                if (!TimeCrystal.entitiesToIgnore.Contains(entity.GetType())
+                                    && (entity is not ParticleSystem || timeStopDelta >= 0f))
                                 {
-                                    deltaTimeInfo.SetValue(null, timeStopDelta);
+                                    Engine.DeltaTime = timeStopDelta;
                                     foreach (Component component in entity.Components)
                                     {
                                         if (component is SoundSource sound)
@@ -541,7 +536,7 @@ namespace vitmod
                                     }
                                     if (entity is ParticleSystem)
                                     {
-                                        rawDeltaTimeInfo.SetValue(null, timeStopRawDelta);
+                                        Engine.RawDeltaTime = timeStopRawDelta;
                                     }
                                 }
                             }
@@ -554,11 +549,11 @@ namespace vitmod
                     {
                         if (Engine.DeltaTime != lastDeltaTime)
                         {
-                            deltaTimeInfo.SetValue(null, lastDeltaTime);
+                            Engine.DeltaTime = lastDeltaTime;
                         }
                         if (Engine.RawDeltaTime != lastRawDeltaTime)
                         {
-                            rawDeltaTimeInfo.SetValue(null, lastRawDeltaTime);
+                            Engine.RawDeltaTime = lastRawDeltaTime;
                         }
                     });
                 }
@@ -579,9 +574,9 @@ namespace vitmod
                 cursor.EmitDelegate<Func<Renderer, Renderer>>((renderer) =>
                 {
                     lastDeltaTime = Engine.DeltaTime;
-                    if (useTimeStopDelta && !(renderer is DisplacementRenderer))
+                    if (useTimeStopDelta && renderer is not DisplacementRenderer)
                     {
-                        deltaTimeInfo.SetValue(null, timeStopDelta);
+                        Engine.DeltaTime = timeStopDelta;
                     }
                     return renderer;
                 });
@@ -592,7 +587,7 @@ namespace vitmod
                 {
                     if (Engine.DeltaTime != lastDeltaTime)
                     {
-                        deltaTimeInfo.SetValue(null, lastDeltaTime);
+                        Engine.DeltaTime = lastDeltaTime;
                     }
                 });
             }
@@ -745,7 +740,7 @@ namespace vitmod
                 TimeCrystal.stopTimer = 0f;
                 TimeCrystal.stopStage = 0;
                 timeStopScaleTimer = 0f;
-                timeStopType = TimeCrystal.freezeTypes.Timer;
+                timeStopType = TimeCrystal.FreezeTypes.Timer;
                 StarCrystal.starDashTimer = 0f;
                 StarCrystal.starInvulnTimer = 0f;
                 StarCrystal.starStaminaTimer = 0f;
@@ -811,11 +806,6 @@ namespace vitmod
                     return result;
             }
             return null;
-        }
-
-        public static bool GetClassName(string name, Entity entity)
-        {
-            return entity.GetType().FullName == name || entity.GetType().Name == name;
         }
 
         public override void Unload()
@@ -897,7 +887,7 @@ namespace vitmod
 
         private float timeStopRawDelta;
 
-        public static TimeCrystal.freezeTypes timeStopType;
+        public static TimeCrystal.FreezeTypes timeStopType;
 
         public static Dictionary<string, Ease.Easer> EaseTypes = new Dictionary<string, Ease.Easer>
         {
@@ -942,12 +932,6 @@ namespace vitmod
         private float lastRawDeltaTime;
 
         public static bool debug;
-
-        private PropertyInfo deltaTimeInfo;
-
-        private PropertyInfo rawDeltaTimeInfo;
-
-        private FieldInfo rendererListSceneInfo;
 
         public static bool frostHelperLoaded;
 

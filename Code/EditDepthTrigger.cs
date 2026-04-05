@@ -6,38 +6,43 @@ using Monocle;
 using System;
 using System.Collections.Generic;
 
-namespace vitmod
-{
+namespace vitmod {
     [CustomEntity("vitellary/editdepthtrigger")]
-    public class EditDepthTrigger : Trigger
-    {
-        public EditDepthTrigger(EntityData data, Vector2 offset) : base(data, offset)
-        {
+    public class EditDepthTrigger : Trigger {
+        public EditDepthTrigger(EntityData data, Vector2 offset) : base(data, offset) {
             newDepth = data.Int("depth", 0);
-            affectedTypes = TypeHelper.ParseTypeList(data.Attr("entitiesToAffect", ""));
+            affectedTypesString = data.Attr("entitiesToAffect", "");
             debug = data.Bool("debug", false);
-            update = data.Bool("updateOnEntry", false);
-            if (update && data.Bool("cacheValidEntities", false)) // Should default to 'true' in editors
+            initializeInAwake = data.Bool("initializeInAwake", false);
+            updateOnEntry = data.Bool("updateOnEntry", false);
+            if (updateOnEntry && data.Bool("cacheValidEntities", false)) {
                 validEntitiesCache = new();
-        }
-
-        public override void Added(Scene scene)
-        {
-            base.Added(scene);
-            foreach (Entity entity in scene.Entities)
-            {
-                HandleEntity(entity, fillCache: true);
-
-                if (debug && entity.CollideCheck(this)) {
-                    Logger.Info("CrystallineHelper/EditDepthTrigger", $"{entity.GetType().FullName}: {entity.Depth}");
-                }
             }
         }
 
-        public override void Update()
-        {
+        public override void Added(Scene scene) {
+            base.Added(scene);
+
+            // we need to parse the type list in added so entities that use static generator methods are guaranteed to have their sids picked up
+            affectedTypes = TypeHelper.ParseTypeList(affectedTypesString);
+
+            if (!initializeInAwake) {
+                HandleEntitiesOnLoad();
+            }
+        }
+
+        public override void Awake(Scene scene) {
+            base.Awake(scene);
+
+            if (initializeInAwake) {
+                HandleEntitiesOnLoad();
+            }
+        }
+
+        public override void Update() {
             base.Update();
-            if (!update) {
+
+            if (!updateOnEntry) {
                 return;
             }
 
@@ -48,6 +53,16 @@ namespace vitmod
             } else {
                 foreach (Entity entity in Scene.Entities) {
                     HandleEntity(entity, fillCache: false);
+                }
+            }
+        }
+
+        private void HandleEntitiesOnLoad() {
+            foreach (Entity entity in Scene.Entities) {
+                HandleEntity(entity, fillCache: true);
+
+                if (debug && entity.CollideCheck(this)) {
+                    Logger.Info("CrystallineHelper/EditDepthTrigger", $"{entity.SourceData?.Name ?? "[N/A]"} / {entity.GetType().FullName}: {entity.Depth}");
                 }
             }
         }
@@ -64,11 +79,13 @@ namespace vitmod
             }
         }
 
+        private readonly string affectedTypesString;
         private HashSet<Type> affectedTypes;
-        private List<Entity> validEntitiesCache;
+        private readonly List<Entity> validEntitiesCache;
 
-        private int newDepth;
-        private bool debug;
-        private bool update;
+        private readonly int newDepth;
+        private readonly bool debug;
+        private readonly bool initializeInAwake;
+        private readonly bool updateOnEntry;
     }
 }

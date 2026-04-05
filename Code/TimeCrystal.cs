@@ -5,29 +5,12 @@ using Monocle;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace vitmod
 {
     [CustomEntity("vitellary/timecrystal")]
     public class TimeCrystal : Entity
     {
-        public static void Load()
-        {
-            On.Celeste.CoreModeToggle.OnPlayer += CoreModeToggle_OnPlayer;
-            On.Celeste.Player.WallBoosterCheck += Player_WallBoosterCheck;
-            On.Celeste.LightningRenderer.Update += LightningRenderer_Update;
-        }
-
-        public static void Unload()
-        {
-            On.Celeste.CoreModeToggle.OnPlayer -= CoreModeToggle_OnPlayer;
-            On.Celeste.Player.WallBoosterCheck -= Player_WallBoosterCheck;
-            On.Celeste.LightningRenderer.Update -= LightningRenderer_Update;
-        }
-
         public TimeCrystal(EntityData data, Vector2 offset) : base(data.Position + offset)
         {
             oneUse = data.Bool("oneUse", false);
@@ -35,7 +18,7 @@ namespace vitmod
             useTime = data.Float("respawnTime", 2.5f);
             immediate = data.Bool("immediate", false);
             untilDash = data.Bool("untilDash", false);
-            entityTypesIgnore = data.Attr("entityTypesToIgnore", "").Split(',');
+            entityTypesToIgnoreString = data.Attr("entityTypesToIgnore", "");
             privateTimeScale = data.Float("timeScale", 0f);
 
             Collider = new Hitbox(16f, 16f, -8f, -8f);
@@ -46,10 +29,10 @@ namespace vitmod
                 outline.CenterOrigin();
                 outline.Visible = false;
             }
-            string spritetype = oneUse ? "idlenr" : "idle";
-            Add(sprite = new Sprite(GFX.Game, "objects/crystals/time/" + (untilDash ? "untildash/" : "") + spritetype));
-            sprite.AddLoop(spritetype, "", 0.1f);
-            sprite.Play(spritetype, false, false);
+            string spriteType = oneUse ? "idlenr" : "idle";
+            Add(sprite = new Sprite(GFX.Game, "objects/crystals/time/" + (untilDash ? "untildash/" : "") + spriteType));
+            sprite.AddLoop(spriteType, "", 0.1f);
+            sprite.Play(spriteType, false, false);
             sprite.CenterOrigin();
             Add(flash = new Sprite(GFX.Game, "objects/crystals/time/flash"));
             flash.Add("flash", "", 0.05f);
@@ -75,6 +58,9 @@ namespace vitmod
         {
             base.Added(scene);
             level = SceneAs<Level>();
+
+            // we need to parse the type list in added so entities that use static generator methods are guaranteed to have their sids picked up
+            entityTypesToIgnore = TypeHelper.ParseTypeList(entityTypesToIgnoreString);
         }
 
         public override void Update()
@@ -144,7 +130,7 @@ namespace vitmod
             {
                 respawnTimer = useTime;
             }
-            entitiesToIgnore = entityTypesIgnore;
+            entitiesToIgnore = entityTypesToIgnore;
             if (stopStage != 1)
             {
                 if (untilDash)
@@ -153,7 +139,7 @@ namespace vitmod
                     {
                         player.Dashes = player.MaxDashes;
                     }
-                    VitModule.timeStopType = freezeTypes.UntilDash;
+                    VitModule.timeStopType = FreezeTypes.UntilDash;
                 }
                 else
                 {
@@ -188,6 +174,22 @@ namespace vitmod
             yield break;
         }
 
+        #region Hooks
+
+        internal static void Load()
+        {
+            On.Celeste.CoreModeToggle.OnPlayer += CoreModeToggle_OnPlayer;
+            On.Celeste.Player.WallBoosterCheck += Player_WallBoosterCheck;
+            On.Celeste.LightningRenderer.Update += LightningRenderer_Update;
+        }
+
+        internal static void Unload()
+        {
+            On.Celeste.CoreModeToggle.OnPlayer -= CoreModeToggle_OnPlayer;
+            On.Celeste.Player.WallBoosterCheck -= Player_WallBoosterCheck;
+            On.Celeste.LightningRenderer.Update -= LightningRenderer_Update;
+        }
+
         private static void CoreModeToggle_OnPlayer(On.Celeste.CoreModeToggle.orig_OnPlayer orig, CoreModeToggle self, Player player)
         {
             if (stopStage == 1) // if time is frozen, delay the activation by 1 frame so that it won't trigger until after time is normal
@@ -209,77 +211,63 @@ namespace vitmod
             {
                 return orig(self);
             }
-            else
-            {
-                return null;
-            }
+
+            return null;
         }
 
-        private static void LightningRenderer_Update(On.Celeste.LightningRenderer.orig_Update orig, LightningRenderer self) {
-            if (stopStage == 1 && !entitiesToIgnore.Contains("Celeste.LightningRenderer")) {
+        private static void LightningRenderer_Update(On.Celeste.LightningRenderer.orig_Update orig, LightningRenderer self)
+        {
+            if (stopStage == 1 && !entitiesToIgnore.Contains(typeof(LightningRenderer)))
+            {
                 if (self.dirty)
                     self.RebuildEdges();
                 self.ToggleEdges(true); // updates edges not rendering when "offcamera"
                 self.Get<CustomBloom>().Update(); // updates rectangle center not rendering when "offcamera"
                 // Lightning Render is updated by default exempting Lightning from the update rules
-            } else {
+            }
+            else
+            {
                 orig(self);
             }
         }
 
-        private bool oneUse;
+        #endregion
 
-        private float stopLength;
+        private readonly bool oneUse;
+        private readonly float stopLength;
+        private readonly float useTime;
+        private readonly bool immediate;
+        private readonly bool untilDash;
+        private readonly string entityTypesToIgnoreString;
+        private HashSet<Type> entityTypesToIgnore;
+        private readonly float privateTimeScale;
 
-        private float useTime;
-
-        private bool immediate;
-
-        private bool untilDash;
-
-        private string[] entityTypesIgnore;
-
-        private float privateTimeScale;
-
-        public static string[] entitiesToIgnore = new string[0];
-
+        public static HashSet<Type> entitiesToIgnore = new();
         public static float timeScaleToSet = 0f;
 
         public static ParticleType P_Shatter;
-
         public static ParticleType P_Shatter_UntilDash;
-
         public static ParticleType P_Regen;
-
         public static ParticleType P_Regen_UntilDash;
-
         public static ParticleType P_Glow;
-
         public static ParticleType P_Glow_UntilDash;
 
         public static float stopTimer;
-
         public static int stopStage;
 
-        private Sprite sprite;
-
-        private Sprite flash;
-
-        private Image outline;
-
-        private Wiggler wiggler;
-
-        private BloomPoint bloom;
-
-        private VertexLight light;
+        private readonly Sprite sprite;
+        private readonly Sprite flash;
+        private readonly Image outline;
+        private readonly Wiggler wiggler;
+        private readonly BloomPoint bloom;
+        private readonly VertexLight light;
+        private readonly SineWave sine;
 
         private Level level;
 
-        private SineWave sine;
-
         private float respawnTimer;
 
-        public enum freezeTypes
+        public enum FreezeTypes
         {
             Timer,
             UntilDash

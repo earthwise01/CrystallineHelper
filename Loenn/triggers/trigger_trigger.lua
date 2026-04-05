@@ -1,4 +1,5 @@
-local enums = require "consts.celeste_enums"
+local enums = require("consts.celeste_enums")
+local crystallineHelper = require("mods").requireFromPlugin("libraries.crystalline_helper")
 
 local activationTypes = {
     ["Flag (Default)"] = "Flag",
@@ -67,7 +68,25 @@ triggerTrigger.fieldInformation = {
         options = enums.core_modes
     },
     playerState = {
-        fieldType = "integer",
+        fieldType = "integer"
+    },
+    entityType = {
+        fieldType = "list",
+        elementSeparator = ",",
+        elementDefault = "",
+        elementOptions = {
+             options = function() return crystallineHelper.getMapSIDs() end,
+             searchable = true
+        }
+    },
+    solidType = {
+        fieldType = "list",
+        elementSeparator = ",",
+        elementDefault = "",
+        elementOptions = {
+             options = function() return crystallineHelper.getMapSIDs() end,
+             searchable = true
+        }
     }
 }
 

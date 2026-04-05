@@ -120,7 +120,7 @@ entities.vitellary/timecrystal.attributes.description.oneUse=Whether the refill 
 entities.vitellary/timecrystal.attributes.description.stopLength=How long (in seconds) the crystal should stop time.
 entities.vitellary/timecrystal.attributes.description.respawnTime=How long (in seconds) after using the crystal for it to respawn.
 entities.vitellary/timecrystal.attributes.description.immediate=Whether the transition to time stopping should be smooth or instantaneous.
-entities.vitellary/timecrystal.attributes.description.entityTypesToIgnore=List of class names for the time crystal to not affect, separated by commas.
+entities.vitellary/timecrystal.attributes.description.entityTypesToIgnore=A comma separated list of entity SIDs (e.g. 'moveBlock') or C# class names (e.g. 'MoveBlock' or 'Celeste.MoveBlock') the time crystal should not affect.
 entities.vitellary/timecrystal.attributes.description.timeScale=The time scale that the entities should be changed to.
 
 # Tele Crystal
@@ -383,18 +383,19 @@ triggers.vitellary/triggertrigger.attributes.description.dashCount=How many dash
 triggers.vitellary/triggertrigger.attributes.description.requiredSpeed=How much speed the player should have, in pixels/second. Positive means right / down, negative means left / up. Some values to reference:\nDefault walking speed is 90.\nDefault dashing speed is 240.\nDefault hyper speed is 325.
 triggers.vitellary/triggertrigger.attributes.description.timeToWait=How long the player needs to wait, in seconds.
 triggers.vitellary/triggertrigger.attributes.description.coreMode=Core mode the level needs to be.
-triggers.vitellary/triggertrigger.attributes.description.entityType=Class name of the type of entity to check.
-triggers.vitellary/triggertrigger.attributes.description.solidType=Class name of the type of solid to check. If left blank, the trigger will allow any solids to be considered.
+triggers.vitellary/triggertrigger.attributes.description.entityType=A comma separated list of entity SIDs (e.g. 'moveBlock') or C# class names (e.g. 'MoveBlock' or 'Celeste.MoveBlock') to check.
+triggers.vitellary/triggertrigger.attributes.description.solidType=A comma separated list of solid SIDs (e.g. 'moveBlock') or C# class names (e.g. 'MoveBlock' or 'Celeste.MoveBlock') to check.\nIf left blank, the trigger will allow any solids to be considered.
 triggers.vitellary/triggertrigger.attributes.description.inputType=The type of input the player needs to press.
 triggers.vitellary/triggertrigger.attributes.description.holdInput=Whether the trigger will be active for the entire time the input is held, or just for the frame it's pressed.
 triggers.vitellary/triggertrigger.attributes.description.onlyIfSafe=Whether the floor the player is standing on needs to be safe ground (aka. ground that a berry could be collected on).
 triggers.vitellary/triggertrigger.attributes.description.resetAfterJump=If true, the trigger will only be activated for one frame when you jump, rather than waiting until you touch the floor to deactivate.
 
 # Edit Depth Trigger
-triggers.vitellary/editdepthtrigger.attributes.description.depth=New depth to set the entity to. Lower / negative values will make the entities render above others.
-triggers.vitellary/editdepthtrigger.attributes.description.entitiesToAffect=The class name of the entity to alter. Can be a comma separated list of multiple entity types as well.
-triggers.vitellary/editdepthtrigger.attributes.description.debug=If true, then Celeste will write the names of all entities touching the trigger in the log (can be seen in log.txt immediately), as well as their current depths. Useful to figure out the names of the entities you'd like to affect, though remember to disable the option later.
-triggers.vitellary/editdepthtrigger.attributes.description.updateOnEntry=If true, the trigger will affect entities that move into it; otherwise, it will only affect entities that are touching it when the room loads.
+triggers.vitellary/editdepthtrigger.attributes.description.depth=The depth to set affected entities to. Lower / negative values will make the entities render above others.
+triggers.vitellary/editdepthtrigger.attributes.description.entitiesToAffect=A comma separated list of entity SIDs (e.g. 'moveBlock') or C# class names (e.g. 'MoveBlock' or 'Celeste.MoveBlock') the trigger should affect.
+triggers.vitellary/editdepthtrigger.attributes.description.debug=If true, then Celeste will write the SIDs and names of all entities touching the trigger in the log (can be seen in log.txt immediately), as well as their current depths.\nUseful to figure out the names of the entities you'd like to affect or their current depths, though remember to disable the option later.
+triggers.vitellary/editdepthtrigger.attributes.description.initializeInAwake=If true, the trigger will only affect entities once all entities in the room are guaranteed to have been loaded, and is able to be affected by entities/triggers that resize triggers.\nIt is recommended to keep this option enabled.
+triggers.vitellary/editdepthtrigger.attributes.description.updateOnEntry=If true, the trigger can affect entities that move into it. Otherwise, it will only affect entities that are touching it when the room loads.
 triggers.vitellary/editdepthtrigger.attributes.description.cacheValidEntities=If 'Update On Entry' is enabled, then all entities that pass the type filter will get cached, massively improving performance.\nOnly disable if you want to edit the depth of entities that get dynamically added to the level after its loaded, like debris.
 
 # Bloom Strength Trigger

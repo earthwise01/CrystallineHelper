@@ -1,40 +1,16 @@
 ﻿using Celeste;
 using Celeste.Mod.Entities;
-using FMOD;
 using Microsoft.Xna.Framework;
 using Monocle;
 using MonoMod.Cil;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace vitmod {
     [CustomEntity("vitellary/triggertrigger")]
     [Tracked(false)]
     public class TriggerTrigger : Trigger {
-        public static void Load() {
-            On.Celeste.Level.LoadLevel += Level_LoadLevel;
-            On.Celeste.Player.Jump += Player_Jump;
-            On.Celeste.Player.WallJump += Player_WallJump;
-            On.Celeste.PlayerCollider.Check += PlayerCollider_Check;
-            IL.Monocle.Engine.Update += Engine_Update;
-        }
-
-        public static void Unload() {
-            On.Celeste.Level.LoadLevel -= Level_LoadLevel;
-            On.Celeste.Player.Jump -= Player_Jump;
-            On.Celeste.Player.WallJump -= Player_WallJump;
-            On.Celeste.PlayerCollider.Check -= PlayerCollider_Check;
-            IL.Monocle.Engine.Update -= Engine_Update;
-        }
-
-        private static readonly HashSet<Entity> collidedEntities = new();
-        private static readonly Dictionary<string, int> collideTracker = new();
-        private static bool hasOnEntityCollide;
-
-        private readonly string collideType;
-
         public TriggerTrigger(EntityData data, Vector2 offset) : base(data, offset) {
             nodes = data.NodesOffset(offset);
             oneUse = data.Bool("oneUse", false);
@@ -78,16 +54,13 @@ namespace vitmod {
             includeWalljump = data.Bool("includeWallJump", false);
             resetAfterJump = data.Bool("resetAfterJump", false);
             playerState = data.Int("playerState", 0);
-            if (string.IsNullOrEmpty(data.Attr("entityType", ""))) {
-                collideType = data.Attr("entityTypeToCollide", "Celeste.Strawberry");
-            } else {
-                collideType = data.Attr("entityType", "");
-            }
-            collideCount = data.Int("collideCount", 1);
-            if (activationType == ActivationTypes.OnEntityCollide) {
-                hasOnEntityCollide = true;
-            }
-            collideSolid = data.Attr("solidType", "");
+            collideTypesString = activationType != ActivationTypes.OnSolid
+                ? !string.IsNullOrEmpty(data.Attr("entityType", ""))
+                    ? data.Attr("entityType")
+                    : data.Attr("entityTypeToCollide", "Celeste.Strawberry")
+                : data.Attr("solidType", "");
+
+            onEntityCollideCount = data.Int("collideCount", 1);
             entitiesInside = new List<Entity>();
             Add(new HoldableCollider((Holdable holdable) => {
                 if (activationType == ActivationTypes.OnHoldableEnter) {
@@ -108,12 +81,12 @@ namespace vitmod {
 
             delay = data.Float("delay", 0f);
             randomize = data.Bool("randomize", false);
-            Global = data.Bool("activateOnTransition", false);
+            global = data.Bool("activateOnTransition", false);
             if (data.Has("requirePlayerInside")) {
-                Global = !data.Bool("requirePlayerInside", true);
+                global = !data.Bool("requirePlayerInside", true);
             }
             if (bypassGlobal.Contains(activationType)) {
-                Global = true;
+                global = true;
             }
             matchPosition = data.Bool("matchPosition", true);
             onlyOnEnter = data.Bool("onlyOnEnter", false);
@@ -121,6 +94,13 @@ namespace vitmod {
             Add(new TransitionListener {
                 OnOut = (f) => DeactivateTriggers(Scene?.Tracker.GetEntity<Player>())
             });
+        }
+
+        public override void Added(Scene scene) {
+            base.Added(scene);
+
+            // we need to parse the type list in added so entities that use static generator methods are guaranteed to have their sids picked up
+            collideTypes = TypeHelper.ParseTypeList(collideTypesString);
         }
 
         public override void Awake(Scene scene) {
@@ -151,9 +131,9 @@ namespace vitmod {
 
         public override void OnEnter(Player player) {
             base.OnEnter(player);
-            if (!Global) {
+            if (!global) {
                 TryActivate(player);
-                if (Activated && oneUse) {
+                if (activated && oneUse) {
                     TryRemove();
                 }
             }
@@ -161,7 +141,7 @@ namespace vitmod {
 
         public override void OnLeave(Player player) {
             base.OnLeave(player);
-            if (!Global) {
+            if (!global) {
                 TryDeactivate(player, false);
             }
         }
@@ -171,12 +151,14 @@ namespace vitmod {
 
             var player = Scene.Tracker.GetEntity<Player>();
 
-            if (player == null) { return; }
+            if (player == null) {
+                return;
+            }
 
             UpdateConditions(player);
 
             if (!onlyOnEnter) {
-                if (Global || PlayerIsInside) {
+                if (global || PlayerIsInside) {
                     TryActivate(player);
                     TryDeactivate(player, true);
                 } else {
@@ -184,7 +166,7 @@ namespace vitmod {
                 }
             }
 
-            if (Activated) {
+            if (activated) {
                 if (oneUse) {
                     TryRemove();
                 } else {
@@ -192,8 +174,7 @@ namespace vitmod {
                 }
             }
 
-            if (resetActivation)
-            {
+            if (resetActivation) {
                 externalActivation = false;
                 resetActivation = false;
             }
@@ -218,7 +199,7 @@ namespace vitmod {
         }
 
         public void TryActivate(Player player) {
-            if (activating || (Activated && !deactivating))
+            if (activating || (activated && !deactivating))
                 return;
 
             if (GetActivateCondition(player)) {
@@ -235,7 +216,7 @@ namespace vitmod {
         }
 
         public void TryDeactivate(Player player, bool inside) {
-            if (deactivating || (!Activated && !activating))
+            if (deactivating || (!activated && !activating))
                 return;
 
             if (!inside || !GetActivateCondition(player)) {
@@ -252,6 +233,10 @@ namespace vitmod {
         }
 
         public bool GetActivateCondition(Player player) {
+            if (externalActivation) {
+                return !invertCondition;
+            }
+
             bool result = false;
             switch (activationType) {
                 case ActivationTypes.Flag:
@@ -294,26 +279,24 @@ namespace vitmod {
                     result = player.SceneAs<Level>().CoreMode == coreMode;
                     break;
                 case ActivationTypes.OnEntityCollide:
-                    result = collideTracker.ContainsKey(collideType) && Compare(collideTracker[collideType], collideCount);
+                    result = Compare(playerEntityCollidingCount, onEntityCollideCount);
                     break;
                 case ActivationTypes.OnSolid:
                     Rectangle playerCollision = player.Collider.Bounds;
                     playerCollision.Inflate(1, 3);
                     foreach (Solid solid in Scene.CollideAll<Solid>(playerCollision)) {
-                        if (string.IsNullOrEmpty(collideSolid) || VitModule.GetClassName(collideSolid, solid)) {
-                            if (player.IsRiding(solid)) {
-                                result = true;
-                                break;
-                            }
+                        if ((collideTypes.Count == 0 || collideTypes.Contains(solid.GetType())) && player.IsRiding(solid)) {
+                            result = true;
+                            break;
                         }
                     }
-                    if (string.IsNullOrEmpty(collideSolid) && player.OnGround()) {
+                    if (collideTypes.Count == 0 && player.OnGround()) {
                         result = true;
                     }
                     break;
                 case ActivationTypes.OnEntityEnter:
                     foreach (Entity entity in Scene.Entities) {
-                        if (entity.CollideCheck(this) && VitModule.GetClassName(collideType, entity)) {
+                        if (entity.CollideCheck(this) && collideTypes.Contains(entity.GetType())) {
                             result = true;
                             break;
                         }
@@ -345,12 +328,11 @@ namespace vitmod {
                     result = false;
                     break;
             }
-            if (externalActivation) {
-                result = true;
-            }
+
             if (invertCondition) {
                 result = !result;
             }
+
             return result;
         }
 
@@ -381,7 +363,7 @@ namespace vitmod {
             DeactivateTriggers(player);
             CleanTriggers();
 
-            Activated = true;
+            activated = true;
 
             if (!randomize) {
                 foreach (Trigger trigger in triggers) {
@@ -405,7 +387,7 @@ namespace vitmod {
         private void DeactivateTriggers(Player player) {
             CleanTriggers();
 
-            Activated = false;
+            activated = false;
 
             foreach (Trigger trigger in triggers) {
                 if (trigger.PlayerIsInside) {
@@ -421,7 +403,7 @@ namespace vitmod {
 
             foreach (Trigger trigger in triggers) {
                 if (matchPosition) {
-                    if (!Global) {
+                    if (!global) {
                         trigger.Position = Position;
                         trigger.Collider.Width = Width;
                         trigger.Collider.Height = Height;
@@ -475,8 +457,7 @@ namespace vitmod {
                 case InputTypes.Dash:
                     return (held ? Input.Dash.Check : Input.Dash.Pressed);
                 case InputTypes.Interact:
-                    if (excludeTalkers && TalkComponent.PlayerOver != null)
-                    {
+                    if (excludeTalkers && TalkComponent.PlayerOver != null) {
                         return false;
                     }
                     return (held ? Input.Talk.Check : Input.Talk.Pressed);
@@ -499,143 +480,156 @@ namespace vitmod {
             return false;
         }
 
+        #region Hooks
+
+        internal static void Load() {
+            On.Celeste.Player.Jump += Player_Jump;
+            On.Celeste.Player.WallJump += Player_WallJump;
+            On.Celeste.PlayerCollider.Check += PlayerCollider_Check;
+            IL.Monocle.Engine.Update += Engine_Update;
+        }
+
+        internal static void Unload() {
+            On.Celeste.Player.Jump -= Player_Jump;
+            On.Celeste.Player.WallJump -= Player_WallJump;
+            On.Celeste.PlayerCollider.Check -= PlayerCollider_Check;
+            IL.Monocle.Engine.Update -= Engine_Update;
+        }
+
         private static void Player_Jump(On.Celeste.Player.orig_Jump orig, Player self, bool particles, bool playSfx) {
             orig(self, particles, playSfx);
-            if (self == null) { return; }
+
+            if (self == null) {
+                return;
+            }
+
             foreach (TriggerTrigger trigger in self.SceneAs<Level>().Tracker.GetEntities<TriggerTrigger>()) {
                 if (trigger.activationType == ActivationTypes.Jumping) {
                     trigger.externalActivation = true;
-                    if (trigger.resetAfterJump)
-                    {
+                    if (trigger.resetAfterJump) {
                         trigger.resetActivation = true;
-                    }
-                    else
-                    {
+                    } else {
                         self.Add(new Coroutine(trigger.JumpRoutine(self, trigger), true));
                     }
                 }
             }
         }
 
-        private static void Player_WallJump(On.Celeste.Player.orig_WallJump orig, Player self, int dir)
-        {
+        private static void Player_WallJump(On.Celeste.Player.orig_WallJump orig, Player self, int dir) {
             orig(self, dir);
-            if (self == null) { return; }
-            foreach (TriggerTrigger trigger in self.SceneAs<Level>().Tracker.GetEntities<TriggerTrigger>())
-            {
-                if (trigger.activationType == ActivationTypes.Jumping && trigger.includeWalljump)
-                {
+
+            if (self == null) {
+                return;
+            }
+
+            foreach (TriggerTrigger trigger in self.SceneAs<Level>().Tracker.GetEntities<TriggerTrigger>()) {
+                if (trigger.activationType == ActivationTypes.Jumping && trigger.includeWalljump) {
                     trigger.externalActivation = true;
-                    if (trigger.resetAfterJump)
-                    {
+                    if (trigger.resetAfterJump) {
                         trigger.resetActivation = true;
-                    }
-                    else
-                    {
+                    } else {
                         self.Add(new Coroutine(trigger.JumpRoutine(self, trigger), true));
                     }
                 }
             }
         }
 
-        public IEnumerator JumpRoutine(Player player, TriggerTrigger trigger) {
+        private IEnumerator JumpRoutine(Player player, TriggerTrigger trigger) {
             while (!player.OnGround()) {
                 yield return null;
             }
             trigger.externalActivation = false;
-            yield break;
-        }
-
-        private static void Level_LoadLevel(On.Celeste.Level.orig_LoadLevel orig, Level self, Player.IntroTypes playerIntro, bool isFromLoader) {
-            hasOnEntityCollide = false;
-            collidedEntities.Clear();
-            collideTracker.Clear();
-            orig(self, playerIntro, isFromLoader);
         }
 
         private static bool PlayerCollider_Check(On.Celeste.PlayerCollider.orig_Check orig, PlayerCollider self, Player player) {
             bool result = orig(self, player);
 
-            if (hasOnEntityCollide) {
-                if (result) {
-                    if (collidedEntities.Add(self.Entity)) {
-                        Type type = self.Entity.GetType();
-                        string fullName = type.FullName;
-                        if (!collideTracker.ContainsKey(type.Name)) {
-                            collideTracker[type.Name] = 0;
-                            collideTracker[fullName] = 0;
-                        }
+            if (self.Scene?.Tracker.GetEntities<TriggerTrigger>() is not { Count: > 0 } triggers) {
+                return result;
+            }
 
-                        collideTracker[type.Name]++;
-                        collideTracker[fullName]++;
+            foreach (TriggerTrigger trigger in triggers) {
+                if (trigger.activationType != ActivationTypes.OnEntityCollide) {
+                    continue;
+                }
+
+                if (!trigger.collideTypes.Contains(self.Entity.GetType())) {
+                    continue;
+                }
+
+                if (result) {
+                    if (trigger.playerCollidingEntities.Add(self.Entity)) {
+                        trigger.playerEntityCollidingCount++;
                     }
                 } else {
-                    collidedEntities.Remove(self.Entity);
+                    trigger.playerCollidingEntities.Remove(self.Entity);
                 }
             }
 
             return result;
         }
 
-        private static void Engine_Update(MonoMod.Cil.ILContext il)
-        {
+        private static void Engine_Update(ILContext il) {
             // code taken from communal helper's AbstractInputController
             // https://github.com/CommunalHelper/CommunalHelper/blob/dev/src/Entities/Misc/AbstractInputController.cs
 
             ILCursor cursor = new(il);
-            if (cursor.TryGotoNext(instr => instr.MatchLdsfld<Engine>("FreezeTimer"),
-                instr => instr.MatchCall<Engine>("get_RawDeltaTime")))
-            {
+            if (cursor.TryGotoNext(MoveType.Before,
+                instr => instr.MatchLdsfld<Engine>("FreezeTimer"),
+                instr => instr.MatchCall<Engine>("get_RawDeltaTime"))) {
                 cursor.EmitDelegate<Action>(UpdateFreezeInput);
             }
         }
 
-        public static void UpdateFreezeInput()
+        private static void UpdateFreezeInput()
         {
-            foreach (TriggerTrigger trigger in Engine.Scene.Tracker.GetEntities<TriggerTrigger>())
-            {
-                if (trigger.activationType == ActivationTypes.OnInput && !trigger.inputHeld && trigger.CheckInput(trigger.inputType, false))
-                {
+            foreach (TriggerTrigger trigger in Engine.Scene.Tracker.GetEntities<TriggerTrigger>()) {
+                if (trigger.activationType == ActivationTypes.OnInput && !trigger.inputHeld && trigger.CheckInput(trigger.inputType, false)) {
                     trigger.externalActivation = true;
                     trigger.resetActivation = true;
                 }
             }
         }
 
-        public bool Global;
-        public bool Activated;
+        #endregion
 
-        private Vector2[] nodes;
-        private bool oneUse;
-        public ActivationTypes activationType;
-        private string flag;
-        private int deaths;
-        private int dashCount;
-        private float requiredSpeed;
-        private float waitTime;
+        private readonly bool global;
+        private bool activated;
+
+        private readonly Vector2[] nodes;
+        private readonly bool oneUse;
+        private readonly ActivationTypes activationType;
+        private readonly string flag;
+        private readonly int deaths;
+        private readonly int dashCount;
+        private readonly float requiredSpeed;
+        private readonly float waitTime;
         private float hasWaited;
-        private int collideCount;
-        private Session.CoreModes coreMode;
-        private InputTypes inputType;
-        private bool inputHeld;
-        private bool excludeTalkers;
-        private bool ifSafe;
-        private bool includeCoyote;
-        public bool includeWalljump;
-        public bool resetAfterJump;
-        private int playerState;
-        private TalkComponent talker;
-        private List<Entity> entitiesInside;
-        private string collideSolid;
-        public bool externalActivation;
-        public bool resetActivation;
-        private bool invertCondition;
-        private ComparisonTypes comparisonType;
-        private bool absoluteValue;
-        private float delay;
-        private bool randomize;
-        private bool matchPosition;
-        private bool onlyOnEnter;
+        private readonly Session.CoreModes coreMode;
+        private readonly InputTypes inputType;
+        private readonly bool inputHeld;
+        private readonly bool excludeTalkers;
+        private readonly bool ifSafe;
+        private readonly bool includeCoyote;
+        private readonly bool includeWalljump;
+        private readonly bool resetAfterJump;
+        private readonly int playerState;
+        private readonly TalkComponent talker;
+        private readonly List<Entity> entitiesInside;
+        private readonly string collideTypesString;
+        private HashSet<Type> collideTypes;
+        private readonly int onEntityCollideCount;
+        private readonly HashSet<Entity> playerCollidingEntities = new();
+        private int playerEntityCollidingCount;
+        private bool externalActivation;
+        private bool resetActivation;
+        private readonly bool invertCondition;
+        private readonly ComparisonTypes comparisonType;
+        private readonly bool absoluteValue;
+        private readonly float delay;
+        private readonly bool randomize;
+        private readonly bool matchPosition;
+        private readonly bool onlyOnEnter;
 
         private List<Trigger> triggers;
         private bool activating;
@@ -676,7 +670,7 @@ namespace vitmod {
             CrouchDash,
             Any,
         };
-        private static List<ActivationTypes> bypassGlobal = new List<ActivationTypes>() {
+        private static readonly List<ActivationTypes> bypassGlobal = new List<ActivationTypes>() {
             ActivationTypes.OnHoldableEnter,
             ActivationTypes.OnInteraction,
             ActivationTypes.OnEntityEnter,
