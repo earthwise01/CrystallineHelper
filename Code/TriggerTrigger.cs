@@ -54,12 +54,11 @@ namespace vitmod {
             includeWalljump = data.Bool("includeWallJump", false);
             resetAfterJump = data.Bool("resetAfterJump", false);
             playerState = data.Int("playerState", 0);
-            collideTypesString = activationType != ActivationTypes.OnSolid
+            collideTypes = TypeHelper.ParseTypeList(activationType != ActivationTypes.OnSolid
                 ? !string.IsNullOrEmpty(data.Attr("entityType", ""))
                     ? data.Attr("entityType")
                     : data.Attr("entityTypeToCollide", "Celeste.Strawberry")
-                : data.Attr("solidType", "");
-
+                : data.Attr("solidType", ""));
             onEntityCollideCount = data.Int("collideCount", 1);
             entitiesInside = new List<Entity>();
             Add(new HoldableCollider((Holdable holdable) => {
@@ -94,13 +93,6 @@ namespace vitmod {
             Add(new TransitionListener {
                 OnOut = (f) => DeactivateTriggers(Scene?.Tracker.GetEntity<Player>())
             });
-        }
-
-        public override void Added(Scene scene) {
-            base.Added(scene);
-
-            // we need to parse the type list in added so entities that use static generator methods are guaranteed to have their sids picked up
-            collideTypes = TypeHelper.ParseTypeList(collideTypesString);
         }
 
         public override void Awake(Scene scene) {
@@ -279,24 +271,24 @@ namespace vitmod {
                     result = player.SceneAs<Level>().CoreMode == coreMode;
                     break;
                 case ActivationTypes.OnEntityCollide:
-                    result = Compare(playerEntityCollidingCount, onEntityCollideCount);
+                    result = Compare(onEntityCollidedCount, onEntityCollideCount);
                     break;
                 case ActivationTypes.OnSolid:
                     Rectangle playerCollision = player.Collider.Bounds;
                     playerCollision.Inflate(1, 3);
                     foreach (Solid solid in Scene.CollideAll<Solid>(playerCollision)) {
-                        if ((collideTypes.Count == 0 || collideTypes.Contains(solid.GetType())) && player.IsRiding(solid)) {
+                        if ((collideTypes.IsEmpty || collideTypes.Contains(solid)) && player.IsRiding(solid)) {
                             result = true;
                             break;
                         }
                     }
-                    if (collideTypes.Count == 0 && player.OnGround()) {
+                    if (collideTypes.IsEmpty && player.OnGround()) {
                         result = true;
                     }
                     break;
                 case ActivationTypes.OnEntityEnter:
                     foreach (Entity entity in Scene.Entities) {
-                        if (entity.CollideCheck(this) && collideTypes.Contains(entity.GetType())) {
+                        if (entity.CollideCheck(this) && collideTypes.Contains(entity)) {
                             result = true;
                             break;
                         }
@@ -553,13 +545,13 @@ namespace vitmod {
                     continue;
                 }
 
-                if (!trigger.collideTypes.Contains(self.Entity.GetType())) {
+                if (!trigger.collideTypes.Contains(self.Entity)) {
                     continue;
                 }
 
                 if (result) {
                     if (trigger.playerCollidingEntities.Add(self.Entity)) {
-                        trigger.playerEntityCollidingCount++;
+                        trigger.onEntityCollidedCount++;
                     }
                 } else {
                     trigger.playerCollidingEntities.Remove(self.Entity);
@@ -616,11 +608,10 @@ namespace vitmod {
         private readonly int playerState;
         private readonly TalkComponent talker;
         private readonly List<Entity> entitiesInside;
-        private readonly string collideTypesString;
-        private HashSet<Type> collideTypes;
+        private readonly TypeHelper.TypeAndSidList collideTypes;
         private readonly int onEntityCollideCount;
         private readonly HashSet<Entity> playerCollidingEntities = new();
-        private int playerEntityCollidingCount;
+        private int onEntityCollidedCount;
         private bool externalActivation;
         private bool resetActivation;
         private readonly bool invertCondition;

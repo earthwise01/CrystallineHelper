@@ -516,7 +516,7 @@ namespace vitmod
                             }
                             else if (timeStopCheck)
                             {
-                                if (!TimeCrystal.entitiesToIgnore.Contains(entity.GetType())
+                                if (!TimeCrystal.entitiesToIgnore.Contains(entity)
                                     && (entity is not ParticleSystem || timeStopDelta >= 0f))
                                 {
                                     Engine.DeltaTime = timeStopDelta;

@@ -18,7 +18,7 @@ namespace vitmod
             useTime = data.Float("respawnTime", 2.5f);
             immediate = data.Bool("immediate", false);
             untilDash = data.Bool("untilDash", false);
-            entityTypesToIgnoreString = data.Attr("entityTypesToIgnore", "");
+            entityTypesToIgnore = TypeHelper.ParseTypeList(data.Attr("entityTypesToIgnore", ""));
             privateTimeScale = data.Float("timeScale", 0f);
 
             Collider = new Hitbox(16f, 16f, -8f, -8f);
@@ -58,9 +58,6 @@ namespace vitmod
         {
             base.Added(scene);
             level = SceneAs<Level>();
-
-            // we need to parse the type list in added so entities that use static generator methods are guaranteed to have their sids picked up
-            entityTypesToIgnore = TypeHelper.ParseTypeList(entityTypesToIgnoreString);
         }
 
         public override void Update()
@@ -238,11 +235,10 @@ namespace vitmod
         private readonly float useTime;
         private readonly bool immediate;
         private readonly bool untilDash;
-        private readonly string entityTypesToIgnoreString;
-        private HashSet<Type> entityTypesToIgnore;
+        private readonly TypeHelper.TypeAndSidList entityTypesToIgnore;
         private readonly float privateTimeScale;
 
-        public static HashSet<Type> entitiesToIgnore = new();
+        public static TypeHelper.TypeAndSidList entitiesToIgnore = new(new(), new());
         public static float timeScaleToSet = 0f;
 
         public static ParticleType P_Shatter;

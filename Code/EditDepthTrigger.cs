@@ -11,7 +11,7 @@ namespace vitmod {
     public class EditDepthTrigger : Trigger {
         public EditDepthTrigger(EntityData data, Vector2 offset) : base(data, offset) {
             newDepth = data.Int("depth", 0);
-            affectedTypesString = data.Attr("entitiesToAffect", "");
+            affectedTypes = TypeHelper.ParseTypeList(data.Attr("entitiesToAffect", ""));
             debug = data.Bool("debug", false);
             initializeInAwake = data.Bool("initializeInAwake", false);
             updateOnEntry = data.Bool("updateOnEntry", false);
@@ -22,9 +22,6 @@ namespace vitmod {
 
         public override void Added(Scene scene) {
             base.Added(scene);
-
-            // we need to parse the type list in added so entities that use static generator methods are guaranteed to have their sids picked up
-            affectedTypes = TypeHelper.ParseTypeList(affectedTypesString);
 
             if (!initializeInAwake) {
                 HandleEntitiesOnLoad();
@@ -68,7 +65,7 @@ namespace vitmod {
         }
 
         private void HandleEntity(Entity entity, bool fillCache) {
-            if (affectedTypes.Contains(entity.GetType())) {
+            if (affectedTypes.Contains(entity)) {
                 if (fillCache) {
                     validEntitiesCache?.Add(entity);
                 }
@@ -79,8 +76,7 @@ namespace vitmod {
             }
         }
 
-        private readonly string affectedTypesString;
-        private HashSet<Type> affectedTypes;
+        private readonly TypeHelper.TypeAndSidList affectedTypes;
         private readonly List<Entity> validEntitiesCache;
 
         private readonly int newDepth;
