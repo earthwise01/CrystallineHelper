@@ -25,6 +25,7 @@ customPuffer.placements = {
             absoluteVector = false,
             tangible = true,
             renderEye = true,
+            alwaysBoost = false,
             dashCooldown = true,
             version = 1,
         }
@@ -52,6 +53,7 @@ customPuffer.placements = {
             absoluteVector = false,
             tangible = true,
             renderEye = true,
+            alwaysBoost = false,
             dashCooldown = true,
             version = 1,
         }

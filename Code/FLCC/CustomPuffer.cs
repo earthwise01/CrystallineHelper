@@ -65,6 +65,7 @@ namespace vitmod
 		private bool needsNewHome;
 		private bool sameFace;
 		private BoostModes boostMode;
+		private bool alwaysBoost;
 
 		private float respawnTime = 2.5f;
 		private float eyeSpin = 0f;
@@ -84,7 +85,7 @@ namespace vitmod
 		private bool dashCooldown = false;
 
 		// 0 - original
-		// 1 - frost helper custom spring speed mult support & ceiling spring support, no random initial offset on static puffers
+		// 1 - frost helper custom spring speed mult support & ceiling spring support
 		private int version = 0;
 
 		public CustomPuffer(Vector2 position, bool faceRight, float angle = 0f, float radius = 32f, float launchSpeed = 280f, string spriteName = "pufferFish", bool isStatic = false, int version = 0)
@@ -106,7 +107,7 @@ namespace vitmod
 
 			this.isStatic = isStatic;
 			idleSine = new SineWave(0.5f, 0f);
-			if (version < 1 || !isStatic)
+			if (!isStatic)
 				idleSine.Randomize();
 			Add(idleSine);
 			anchorPosition = Position;
@@ -133,7 +134,7 @@ namespace vitmod
 		}
 
 		public CustomPuffer(EntityData data, Vector2 offset, EntityID id)
-			: this(data.Position + offset, data.Bool("right", false), data.Float("angle", 0f), data.Float("radius", 32f), data.Float("launchSpeed", 280f), data.Attr("sprite", "pufferFish"), data.Bool("static"), data.Int("version", 0))
+			: this(data.Position + offset, data.Bool("right", false), data.Float("angle", 0f), data.Float("radius", 32f), data.Float("launchSpeed", 280f), data.Attr("sprite", "pufferFish"), data.Bool("static", false), data.Int("version", 0))
 		{
 			ID = id;
 
@@ -151,6 +152,7 @@ namespace vitmod
 			launchState = data.Bool("setLaunchState", true);
 			tangible = data.Bool("tangible", true);
 			renderEye = data.Bool("renderEye", true);
+			alwaysBoost = data.Bool("alwaysBoost", false);
 			dashCooldown = data.Bool("dashCooldown", false);
 
 			if (data.Bool("holdable"))
@@ -812,7 +814,7 @@ namespace vitmod
 				player.AutoJump = true;
 			}
 
-			if (Input.MoveX.Value == Math.Sign(player.Speed.X))
+			if (Input.MoveX.Value == Math.Sign(player.Speed.X) || alwaysBoost)
 			{
 				player.explodeLaunchBoostTimer = 0f;
 				player.Speed.X *= 1.2f;
